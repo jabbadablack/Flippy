@@ -1,17 +1,17 @@
 #pragma once
-#include <AZCore/Component/ComponentBus.h>
-#include <AZCore/std/string/string.h>
+#include <AzCore/Component/ComponentBus.h>
+#include <AzCore/std/string/string.h>
 
 namespace FlippyGem
 {
     class FlippyComponentRequests : public AZ::ComponentBus
     {
     public:
+        AZ_RTTI(FlippyComponentRequests, "{21B35C86-5F2D-4DF3-B875-14EE3BAE64CA}");
+        virtual ~FlippyComponentRequests() = default;
+
         virtual void PlayAnimation(const AZStd::string& animationName) = 0;
         virtual void StopAnimation() = 0;
-        virtual void SetPlaybackRate(float rate) = 0;
-        virtual void SetFrame(int frameIndex) = 0;
     };
-
     using FlippyComponentRequestBus = AZ::EBus<FlippyComponentRequests>;
 }
