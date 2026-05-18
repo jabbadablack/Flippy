@@ -5,16 +5,13 @@
 #include <AzCore/std/string/string.h>
 #include <AzCore/std/containers/vector.h>
 #include <AtomLyIntegration/CommonFeatures/Material/MaterialAssignment.h>
-#include <chrono>
-
-#include "FlippyComponentBus.h"
 
 namespace FlippyGem
 {
-    struct AnimationData
+    struct FlippyAnimation
     {
-        AZ_TYPE_INFO(AnimationData, "{7F13876D-29A8-4D2A-B6A9-D3CA9B3DE44A}");
-        AZ_CLASS_ALLOCATOR(AnimationData, AZ::SystemAllocator);
+        AZ_TYPE_INFO(FlippyAnimation, "{00ae072a-dbfc-41ac-aa40-324d58f6ff3e}");
+        AZ_CLASS_ALLOCATOR(FlippyAnimation, AZ::SystemAllocator);
 
         AZStd::string m_name = "Idle";
         int m_startRow = 0;
@@ -23,14 +20,25 @@ namespace FlippyGem
         float m_fps = 12.0f;
     };
 
+    // The Bus is now declared directly inside the header
+    class FlippyComponentRequests : public AZ::ComponentBus
+    {
+    public:
+        AZ_RTTI(FlippyComponentRequests, "{4cbefb6c-38f3-4a39-80f4-51019836440a}");
+        virtual ~FlippyComponentRequests() = default;
+
+        virtual void PlayAnimation(const AZStd::string& animationName) = 0;
+        virtual void StopAnimation() = 0;
+    };
+    using FlippyComponentRequestBus = AZ::EBus<FlippyComponentRequests>;
+
     class FlippyComponent
         : public AZ::Component
         , protected AZ::TickBus::Handler
-        , protected AZ::SystemTickBus::Handler // Required for Editor Preview
         , public FlippyComponentRequestBus::Handler
     {
     public:
-        AZ_COMPONENT(FlippyComponent, "{D7E2B06F-8D15-4D1C-A1A8-D0623DE211CA}");
+        AZ_COMPONENT(FlippyComponent, "{334d8e3b-5f54-4dde-8201-e632c4508fd2}");
 
         static void Reflect(AZ::ReflectContext* context);
         static void GetProvidedServices(AZ::ComponentDescriptor::DependencyArrayType& provided);
@@ -43,7 +51,6 @@ namespace FlippyGem
 
     protected:
         void OnTick(float deltaTime, AZ::ScriptTimePoint time) override;
-        void OnSystemTick() override;
 
         void PlayAnimation(const AZStd::string& animationName) override;
         void StopAnimation() override;
@@ -53,8 +60,6 @@ namespace FlippyGem
 
         void ApplyMaterialScale(float tileU, float tileV);
         void ApplyMaterialOffset(float offsetU, float offsetV);
-        void AdvanceFrame(float deltaTime);
-        AZ::u32 OnEditorPropertiesChanged();
 
         AZ::EntityId m_materialEntityId;
 
@@ -65,19 +70,14 @@ namespace FlippyGem
 
         int m_columns = 1;
         int m_rows = 1;
-        bool m_previewInEditor = true;
 
-        AZStd::vector<AnimationData> m_animations;
+        AZStd::vector<FlippyAnimation> m_animations;
         AZStd::string m_defaultAnimation = "Idle";
 
         bool m_isPlaying = false;
         bool m_isMaterialInitialized = false;
-        AnimationData m_currentAnim;
+        FlippyAnimation m_currentAnim;
         float m_timeAccumulator = 0.0f;
         int m_currentFrame = 0;
-
-        // Editor preview timing
-        bool m_isGameTicking = false;
-        std::chrono::steady_clock::time_point m_lastSystemTickTime;
     };
 }

@@ -13,8 +13,4 @@ namespace FlippyGem
 
     // Interface TypeIds
     inline constexpr const char* FlippyGemRequestsTypeId = "{11B505B6-17EA-489B-AFAB-541DF16A5C09}";
-
-    // Sprite Component TypeIds
-    inline constexpr const char* AnimationDataTypeId = "{E2460455-F8C4-4620-B947-C8EEF5A73F77}";
-    inline constexpr const char* FlippyComponentTypeId = "{FFDDE3ED-8ABB-4172-9ECA-1AC18331EE22}";
 }
