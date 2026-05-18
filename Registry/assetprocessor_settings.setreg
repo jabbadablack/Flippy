@@ -1,0 +1,18 @@
+{
+    "Amazon": {
+        "AssetProcessor": {
+            "Settings": {
+                "ScanFolder FlippyGem/Assets": {
+                    "watch": "@GEMROOT:FlippyGem@/Assets",
+                    "recursive": 1,
+                    "order": 101
+                },
+                "ScanFolder FlippyGem/Registry": {
+                    "watch": "@GEMROOT:FlippyGem@/Registry",
+                    "recursive": 1,
+                    "order": 102
+                }
+            }
+        }
+    }
+}

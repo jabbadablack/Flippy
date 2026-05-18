@@ -1,0 +1,31 @@
+{
+    "gem_name": "FlippyGem",
+    "version": "1.0.0",
+    "display_name": "Flyppy",
+    "license": "Apache-2.0",
+    "license_url": "",
+    "origin": "jabbadablack",
+    "origin_url": "",
+    "type": "Code",
+    "summary": "",
+    "canonical_tags": [
+        "Gem"
+    ],
+    "user_tags": [
+        "FlippyGem"
+    ],
+    "platforms": [
+        "Windows","iOS","Linux","Android"
+    ],
+    "icon_path": "",
+    "requirements": "",
+    "documentation_url": "",
+    "dependencies": [
+        "Atom_RPI"
+    ],
+    "repo_uri": "",
+    "compatible_engines": [
+    ],
+    "engine_api_dependencies":[
+    ]
+}
