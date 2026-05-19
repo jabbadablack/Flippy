@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) Contributors to the Open 3D Engine Project.
+ * For complete copyright and license terms please see the LICENSE at the root of this distribution.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
+ *
+ */
+
 #include "FlippyComponent.h"
 
 #include <AzCore/Serialization/SerializeContext.h>
@@ -33,6 +41,7 @@ namespace FlippyGem
                 ->Field("UVOffsetVProperty", &FlippyComponent::m_uvOffsetVProperty)
                 ->Field("Columns", &FlippyComponent::m_columns)
                 ->Field("Rows", &FlippyComponent::m_rows)
+                ->Field("PreviewInEditor", &FlippyComponent::m_previewInEditor)
                 ->Field("DefaultAnimation", &FlippyComponent::m_defaultAnimation)
                 ->Field("Animations", &FlippyComponent::m_animations);
 
@@ -67,6 +76,8 @@ namespace FlippyGem
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_materialEntityId, "Target Entity", "Leave blank to target this entity.")
 
                     ->ClassElement(AZ::Edit::ClassElements::Group, "Animations")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_previewInEditor, "Preview In Editor", "Play the Animation in editor")
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnPreviewInEditorChanged)
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_defaultAnimation, "Default State", "")
                     ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_animations, "Animation List", "")
@@ -94,6 +105,7 @@ namespace FlippyGem
             AZ::SystemTickBus::Handler::BusConnect();
         }
         m_lastSystemTickTime = std::chrono::steady_clock::now();
+        m_lastGameTickTime = std::chrono::time_point<std::chrono::steady_clock>();
     }
 
     void FlippyComponent::Activate()
@@ -103,9 +115,13 @@ namespace FlippyGem
         AZ::SystemTickBus::Handler::BusConnect();
 
         m_lastSystemTickTime = std::chrono::steady_clock::now();
+        m_lastGameTickTime = std::chrono::time_point<std::chrono::steady_clock>();
         m_isGameActive = false;
         m_isMaterialInitialized = false;
 
+        //! Unconditionally execute the default animation on activate.
+        //! In Game Mode, this guarantees it plays when you hit Play.
+        //! In Editor Mode, if the preview toggle is off, SystemTickBus will intentionally ignore it!
         PlayAnimation(m_defaultAnimation);
     }
 
@@ -128,13 +144,15 @@ namespace FlippyGem
         {
             if (anim.m_name == name)
             {
-                return (anim.m_startRow * m_columns) + anim.m_startColumn;
+                int startFrameCalc = (anim.m_startRow * m_columns) + anim.m_startColumn;
+                return anim.m_playBackwards ? (startFrameCalc + anim.m_frameCount - 1) : startFrameCalc;
             }
         }
 
         if (!m_animations.empty())
         {
-            return (m_animations[0].m_startRow * m_columns) + m_animations[0].m_startColumn;
+            int startFrameCalc = (m_animations[0].m_startRow * m_columns) + m_animations[0].m_startColumn;
+            return m_animations[0].m_playBackwards ? (startFrameCalc + m_animations[0].m_frameCount - 1) : startFrameCalc;
         }
 
         return 0;
@@ -170,9 +188,7 @@ namespace FlippyGem
         }
 
         m_currentAnim = *targetAnim;
-
-        int startFrameCalc = (m_currentAnim.m_startRow * m_columns) + m_currentAnim.m_startColumn;
-        m_currentFrame = m_currentAnim.m_playBackwards ? (startFrameCalc + m_currentAnim.m_frameCount - 1) : startFrameCalc;
+        m_currentFrame = GetStartFrameForAnimation(targetAnim->m_name);
 
         m_timeAccumulator = 0.0f;
         m_isPlaying = true;
@@ -184,21 +200,33 @@ namespace FlippyGem
         m_isPlaying = false;
     }
 
+    void FlippyComponent::OnPreviewInEditorChanged()
+    {
+        //! Exclusive callback to perfectly mirror the FlipBook behavior when the UI box is clicked
+        if (m_previewInEditor)
+        {
+            PlayAnimation(m_defaultAnimation);
+        }
+        else
+        {
+            StopAnimation();
+            m_currentFrame = GetStartFrameForAnimation(m_defaultAnimation);
+            RefreshMaterial();
+        }
+    }
+
     AZ::u32 FlippyComponent::OnEditorPropertiesChanged()
     {
         m_isMaterialInitialized = false;
 
-        StopAnimation();
-
-        m_currentFrame = 0;
-        for (const auto& anim : m_animations)
+        if (m_previewInEditor)
         {
-            if (anim.m_name == m_defaultAnimation)
-            {
-                int startFrameCalc = (anim.m_startRow * m_columns) + anim.m_startColumn;
-                m_currentFrame = anim.m_playBackwards ? (startFrameCalc + anim.m_frameCount - 1) : startFrameCalc;
-                break;
-            }
+            PlayAnimation(m_defaultAnimation);
+        }
+        else
+        {
+            StopAnimation();
+            m_currentFrame = GetStartFrameForAnimation(m_defaultAnimation);
         }
 
         RefreshMaterial();
@@ -285,20 +313,15 @@ namespace FlippyGem
 
     void FlippyComponent::OnTick(float deltaTime, AZ::ScriptTimePoint /*time*/)
     {
-        //! The Editor System Tick will occasionally fire a Game Tick with 0.0s delta time to update physics representations.
-        //! We must intentionally ignore these phantom ticks to prevent the Editor from locking itself out of System Tick logic.
         if (deltaTime <= 0.0f)
         {
             return;
         }
 
-        //! The Game Engine has officially launched, so force the animation to resume.
-        if (!m_isPlaying)
-        {
-            PlayAnimation(m_defaultAnimation);
-        }
-
+        m_lastGameTickTime = std::chrono::steady_clock::now();
         m_isGameActive = true;
+
+        //! In Game Mode, we exclusively rely on this function. It ignores the Editor preview toggle!
         AdvanceFrame(deltaTime);
     }
 
@@ -309,7 +332,14 @@ namespace FlippyGem
         m_lastSystemTickTime = now;
 
         //! Yield execution to OnTick if the game is actively running.
-        if (m_isGameActive)
+        std::chrono::duration<float> timeSinceGameTick = now - m_lastGameTickTime;
+        if (timeSinceGameTick.count() < 0.5f)
+        {
+            return;
+        }
+
+        //! We are securely in Editor Mode. If the toggle is off, simply refuse to advance time!
+        if (!m_previewInEditor)
         {
             return;
         }

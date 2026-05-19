@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) Contributors to the Open 3D Engine Project.
+ * For complete copyright and license terms please see the LICENSE at the root of this distribution.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
+ *
+ */
+
 #pragma once
 
 #include <AzCore/Component/Component.h>
@@ -73,7 +81,9 @@ namespace FlippyGem
 
         void AdvanceFrame(float deltaTime);
         void RefreshMaterial();
+
         AZ::u32 OnEditorPropertiesChanged();
+        void OnPreviewInEditorChanged();
 
         AZ::EntityId m_materialEntityId;
 
@@ -84,6 +94,7 @@ namespace FlippyGem
 
         int m_columns = 1;
         int m_rows = 1;
+        bool m_previewInEditor = true;
 
         AZStd::vector<FlippyAnimation> m_animations;
         AZStd::string m_defaultAnimation = "";
@@ -95,6 +106,7 @@ namespace FlippyGem
 
         bool m_isGameActive = false;
         std::chrono::steady_clock::time_point m_lastSystemTickTime;
+        std::chrono::steady_clock::time_point m_lastGameTickTime;
 
         bool m_isMaterialInitialized = false;
         float m_lastTileU = -1.0f;
