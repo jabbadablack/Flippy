@@ -15,12 +15,13 @@ namespace FlippyGem
         if (auto serializeContext = azrtti_cast<AZ::SerializeContext*>(context))
         {
             serializeContext->Class<FlippyAnimation>()
-                ->Version(2)
+                ->Version(3)
                 ->Field("Name", &FlippyAnimation::m_name)
                 ->Field("StartRow", &FlippyAnimation::m_startRow)
                 ->Field("StartColumn", &FlippyAnimation::m_startColumn)
                 ->Field("FrameCount", &FlippyAnimation::m_frameCount)
-                ->Field("FPS", &FlippyAnimation::m_fps);
+                ->Field("FPS", &FlippyAnimation::m_fps)
+                ->Field("PlayBackwards", &FlippyAnimation::m_playBackwards);
 
             serializeContext->Class<FlippyComponent, AZ::Component>()
                 ->Version(3)
@@ -41,7 +42,8 @@ namespace FlippyGem
                     ->Attribute(AZ::Edit::Attributes::Min, 0)
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_frameCount, "Frame Count", "Total frames in this animation")
                     ->Attribute(AZ::Edit::Attributes::Min, 1)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_fps, "FPS", "");
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_fps, "FPS", "")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_playBackwards, "Play Backwards", "Plays the animation sequence in reverse");
 
                 editContext->Class<FlippyComponent>("Flippy", "Cycles through material textures to animate them.")
                     ->ClassElement(AZ::Edit::ClassElements::EditorData, "")
@@ -138,7 +140,10 @@ namespace FlippyGem
         }
 
         m_currentAnim = *targetAnim;
-        m_currentFrame = (m_currentAnim.m_startRow * m_columns) + m_currentAnim.m_startColumn;
+
+        int startFrameCalc = (m_currentAnim.m_startRow * m_columns) + m_currentAnim.m_startColumn;
+        m_currentFrame = m_currentAnim.m_playBackwards ? (startFrameCalc + m_currentAnim.m_frameCount - 1) : startFrameCalc;
+
         m_timeAccumulator = 0.0f;
         m_isPlaying = true;
         RefreshMaterial();
@@ -160,7 +165,8 @@ namespace FlippyGem
         {
             if (anim.m_name == m_defaultAnimation)
             {
-                m_currentFrame = (anim.m_startRow * m_columns) + anim.m_startColumn;
+                int startFrameCalc = (anim.m_startRow * m_columns) + anim.m_startColumn;
+                m_currentFrame = anim.m_playBackwards ? (startFrameCalc + anim.m_frameCount - 1) : startFrameCalc;
                 break;
             }
         }
@@ -207,7 +213,7 @@ namespace FlippyGem
 
         if (m_currentFrame < globalStartFrame || m_currentFrame > globalEndFrame)
         {
-            m_currentFrame = globalStartFrame;
+            m_currentFrame = m_currentAnim.m_playBackwards ? globalEndFrame : globalStartFrame;
         }
 
         m_timeAccumulator += deltaTime;
@@ -218,12 +224,25 @@ namespace FlippyGem
             int framesToAdvance = static_cast<int>(m_timeAccumulator / frameDuration);
             m_timeAccumulator -= framesToAdvance * frameDuration;
 
-            m_currentFrame += framesToAdvance;
-
-            if (m_currentFrame > globalEndFrame)
+            if (m_currentAnim.m_playBackwards)
             {
-                int over = m_currentFrame - globalStartFrame;
-                m_currentFrame = globalStartFrame + (over % m_currentAnim.m_frameCount);
+                m_currentFrame -= framesToAdvance;
+
+                if (m_currentFrame < globalStartFrame)
+                {
+                    int under = globalStartFrame - m_currentFrame - 1;
+                    m_currentFrame = globalEndFrame - (under % m_currentAnim.m_frameCount);
+                }
+            }
+            else
+            {
+                m_currentFrame += framesToAdvance;
+
+                if (m_currentFrame > globalEndFrame)
+                {
+                    int over = m_currentFrame - globalStartFrame;
+                    m_currentFrame = globalStartFrame + (over % m_currentAnim.m_frameCount);
+                }
             }
 
             RefreshMaterial();

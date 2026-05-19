@@ -20,6 +20,7 @@ namespace FlippyGem
         int m_startColumn = 0;
         int m_frameCount = 1;
         float m_fps = 12.0f;
+        bool m_playBackwards = false;
     };
 
     class FlippyComponentRequests : public AZ::ComponentBus
