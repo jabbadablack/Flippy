@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) Contributors to the Open 3D Engine Project.
+ * For complete copyright and license terms please see the LICENSE at the root of this distribution.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR MIT
+ *
+ */
+
 #pragma once
 
 #include <AzCore/Component/Component.h>
@@ -10,19 +18,21 @@
 
 namespace FlippyGem
 {
+    //! Defines a single animation sequence extracted from a spritesheet.
     struct FlippyAnimation
     {
         AZ_TYPE_INFO(FlippyAnimation, FlippyAnimationTypeId);
         AZ_CLASS_ALLOCATOR(FlippyAnimation, AZ::SystemAllocator);
 
         AZStd::string m_name = "";
-        int m_startRow = 0;
         int m_startColumn = 0;
+        int m_startRow = 0;
         int m_frameCount = 1;
         float m_fps = 12.0f;
         bool m_playBackwards = false;
     };
 
+    //! Bus interface for external scripts or components to control the Flippy Animator.
     class FlippyComponentRequests : public AZ::ComponentBus
     {
     public:
@@ -34,6 +44,7 @@ namespace FlippyGem
     };
     using FlippyComponentRequestBus = AZ::EBus<FlippyComponentRequests>;
 
+    //! Cycles through material UV offsets to animate 2D sprite sheets.
     class FlippyComponent
         : public AZ::Component
         , protected AZ::TickBus::Handler
@@ -62,7 +73,8 @@ namespace FlippyGem
         void StopAnimation() override;
 
     private:
-        AZStd::vector<AZ::Render::MaterialAssignmentId> GetActiveMaterialIds(AZ::EntityId targetEntity);
+        AZStd::vector<AZ::Render::MaterialAssignmentId> GetActiveMaterialIds(AZ::EntityId targetEntity) const;
+        int GetStartFrameForAnimation(const AZStd::string& name) const;
 
         void ApplyMaterialScale(float tileU, float tileV);
         void ApplyMaterialOffset(float offsetU, float offsetV);
@@ -96,4 +108,4 @@ namespace FlippyGem
         float m_lastTileU = -1.0f;
         float m_lastTileV = -1.0f;
     };
-}
+} // namespace FlippyGem
