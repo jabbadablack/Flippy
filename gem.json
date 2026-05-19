@@ -1,13 +1,13 @@
 {
     "gem_name": "FlippyGem",
     "version": "1.0.0",
-    "display_name": "Flyppy",
+    "display_name": "Flippy",
     "license": "Apache-2.0",
-    "license_url": "",
+    "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
     "origin": "jabbadablack",
-    "origin_url": "",
+    "origin_url": "https://github.com/jabbadablack",
     "type": "Code",
-    "summary": "",
+    "summary": "This is a flipbook gem that allows you to animate material textures. Commonly used to animate spritesheets.",
     "canonical_tags": [
         "Gem"
     ],
@@ -21,9 +21,10 @@
     "requirements": "",
     "documentation_url": "",
     "dependencies": [
-        "Atom_RPI"
+        "Atom_RPI",
+        "AtomLyIntegration"
     ],
-    "repo_uri": "",
+    "repo_uri": "https://github.com/jabbadablack/Flippy",
     "compatible_engines": [
     ],
     "engine_api_dependencies":[
