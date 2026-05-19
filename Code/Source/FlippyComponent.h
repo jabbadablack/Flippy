@@ -6,12 +6,13 @@
 #include <AzCore/std/containers/vector.h>
 #include <AtomLyIntegration/CommonFeatures/Material/MaterialAssignment.h>
 #include <chrono>
+#include <FlippyGem/FlippyGemTypeIds.h>
 
 namespace FlippyGem
 {
     struct FlippyAnimation
     {
-        AZ_TYPE_INFO(FlippyAnimation, "{6230413b-d706-4dd4-a104-ee6ac766709a}");
+        AZ_TYPE_INFO(FlippyAnimation, FlippyAnimationTypeId);
         AZ_CLASS_ALLOCATOR(FlippyAnimation, AZ::SystemAllocator);
 
         AZStd::string m_name = "";
@@ -24,7 +25,7 @@ namespace FlippyGem
     class FlippyComponentRequests : public AZ::ComponentBus
     {
     public:
-        AZ_RTTI(FlippyComponentRequests, "{b4150cdb-7d4d-4933-aebc-14800ae75826}");
+        AZ_RTTI(FlippyComponentRequests, FlippyGemRequestsTypeId);
         virtual ~FlippyComponentRequests() = default;
 
         virtual void PlayAnimation(const AZStd::string& animationName) = 0;
@@ -39,7 +40,7 @@ namespace FlippyGem
         , public FlippyComponentRequestBus::Handler
     {
     public:
-        AZ_COMPONENT(FlippyComponent, "{8fa5e056-1605-41db-82ec-8bccb23f2f55}");
+        AZ_COMPONENT(FlippyComponent, FlippyComponentTypeId);
 
         static void Reflect(AZ::ReflectContext* context);
         static void GetProvidedServices(AZ::ComponentDescriptor::DependencyArrayType& provided);
@@ -79,20 +80,17 @@ namespace FlippyGem
         int m_columns = 1;
         int m_rows = 1;
 
-        AZStd::vector<FlippyAnimation> m_animations = { FlippyAnimation() };
+        AZStd::vector<FlippyAnimation> m_animations;
         AZStd::string m_defaultAnimation = "";
 
-        // Runtime State
         bool m_isPlaying = false;
         FlippyAnimation m_currentAnim;
         float m_timeAccumulator = 0.0f;
         int m_currentFrame = 0;
 
-        // Tick Management
         bool m_isGameActive = false;
         std::chrono::steady_clock::time_point m_lastSystemTickTime;
 
-        // Material caching variables
         bool m_isMaterialInitialized = false;
         float m_lastTileU = -1.0f;
         float m_lastTileV = -1.0f;

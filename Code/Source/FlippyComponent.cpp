@@ -35,9 +35,9 @@ namespace FlippyGem
                 editContext->Class<FlippyAnimation>("Animation State", "A single animation sequence")
                     ->ClassElement(AZ::Edit::ClassElements::EditorData, "")
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_name, "Name", "")
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_startRow, "Start Row", "Row index (Starts at 0)")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_startRow, "Start Column", "Row index (Starts at 0)")
                     ->Attribute(AZ::Edit::Attributes::Min, 0)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_startColumn, "Start Column", "Column index (Starts at 0)")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_startColumn, "Start Row", "Column index (Starts at 0)")
                     ->Attribute(AZ::Edit::Attributes::Min, 0)
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_frameCount, "Frame Count", "Total frames in this animation")
                     ->Attribute(AZ::Edit::Attributes::Min, 1)
@@ -49,10 +49,10 @@ namespace FlippyGem
                     ->Attribute(AZ::Edit::Attributes::AppearsInAddComponentMenu, AZ_CRC_CE("Game"))
 
                     ->ClassElement(AZ::Edit::ClassElements::Group, "Grid Settings")
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_columns, "Columns", "")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_columns, "Rows (Horizontal)", "")
                     ->Attribute(AZ::Edit::Attributes::Min, 1)
                     ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_rows, "Rows", "")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_rows, "Columns (Vertical)", "")
                     ->Attribute(AZ::Edit::Attributes::Min, 1)
                     ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
 
@@ -232,10 +232,8 @@ namespace FlippyGem
 
     void FlippyComponent::OnTick(float deltaTime, AZ::ScriptTimePoint /*time*/)
     {
-        // FIX: Ignore phantom zero-time ticks that fire during transitions
         if (deltaTime <= 0.0f) return;
 
-        // FIX: Unconditionally ensure the animation plays when Game Mode is actively ticking
         if (!m_isPlaying)
         {
             PlayAnimation(m_defaultAnimation);
@@ -251,10 +249,10 @@ namespace FlippyGem
         std::chrono::duration<float> delta = now - m_lastSystemTickTime;
         m_lastSystemTickTime = now;
 
+        if (m_isGameActive) return;
+
         AdvanceFrame(delta.count());
     }
-
-    // --- MATERIAL BUS HELPERS ---
 
     AZStd::vector<AZ::Render::MaterialAssignmentId> FlippyComponent::GetActiveMaterialIds(AZ::EntityId targetEntity)
     {
