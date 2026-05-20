@@ -1,11 +1,3 @@
-/*
- * Copyright (c) Contributors to the Open 3D Engine Project.
- * For complete copyright and license terms please see the LICENSE at the root of this distribution.
- *
- * SPDX-License-Identifier: Apache-2.0 OR MIT
- *
- */
-
 #include "FlippyComponent.h"
 
 #include <AzCore/Serialization/SerializeContext.h>
@@ -179,7 +171,6 @@ namespace FlippyGem
         {
             PlayAnimation(m_defaultAnimation);
 
-            // If preview is off in the Editor, stop immediately but rest on the first frame of the default animation
             if (!m_previewInEditor && !m_isGameActive)
             {
                 StopAnimation();
@@ -188,7 +179,6 @@ namespace FlippyGem
         }
         else
         {
-            // If no default animation is enabled, fallback to forcing the first valid sprite sheet into the material
             if (m_useMultipleSpriteSheets && !m_spriteSheets.empty())
             {
                 SetMaterialTexture(m_spriteSheets[0].m_spriteAsset);
@@ -252,9 +242,8 @@ namespace FlippyGem
             }
         }
 
-        if (!targetAnim) return; // Animation not found
+        if (!targetAnim) return;
 
-        // Circuit breaker if animation is already playing
         if (m_isPlaying && m_currentAnim.m_name == targetAnim->m_name)
         {
             m_currentAnim = *targetAnim;
@@ -263,14 +252,13 @@ namespace FlippyGem
 
         m_currentAnim = *targetAnim;
 
-        // If the spritesheet changed, update the material texture and grid sizes
         if (targetSprite.GetId() != m_activeSpriteId)
         {
             SetMaterialTexture(targetSprite);
             m_activeSpriteId = targetSprite.GetId();
             m_activeColumns = targetCols;
             m_activeRows = targetRows;
-            m_isMaterialInitialized = false; // Force a scale recalculation
+            m_isMaterialInitialized = false;
         }
 
         if (m_activeColumns <= 0 || m_activeRows <= 0) return;
@@ -433,8 +421,6 @@ namespace FlippyGem
 
     void FlippyComponent::SetMaterialTexture(const AZ::Data::Asset<AZ::RPI::StreamingImageAsset>& spriteAsset)
     {
-        // FIX: Add this check. If the asset isn't ready, don't force the material to update.
-        // This prevents the material from "flickering" to a null or loading-state texture.
         if (!spriteAsset.IsReady())
         {
             return;
