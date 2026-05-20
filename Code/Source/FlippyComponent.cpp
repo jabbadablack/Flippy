@@ -433,7 +433,9 @@ namespace FlippyGem
 
     void FlippyComponent::SetMaterialTexture(const AZ::Data::Asset<AZ::RPI::StreamingImageAsset>& spriteAsset)
     {
-        if (!spriteAsset.GetId().IsValid())
+        // FIX: Add this check. If the asset isn't ready, don't force the material to update.
+        // This prevents the material from "flickering" to a null or loading-state texture.
+        if (!spriteAsset.IsReady())
         {
             return;
         }
@@ -443,8 +445,6 @@ namespace FlippyGem
 
         for (const auto& id : materialIds)
         {
-            // Use AZ::Data::Asset<AZ::RPI::StreamingImageAsset> directly,
-            // the MaterialComponent will handle the conversion to the texture map.
             AZ::Render::MaterialComponentRequestBus::Event(
                 targetEntity, &AZ::Render::MaterialComponentRequests::SetPropertyValue,
                 id, AZStd::string("baseColor.textureMap"), AZStd::any(spriteAsset));
