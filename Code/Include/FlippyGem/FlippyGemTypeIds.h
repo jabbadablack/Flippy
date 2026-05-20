@@ -15,4 +15,5 @@ namespace FlippyGem
     inline constexpr const char* FlippyGemRequestsTypeId = "{07ce1ffe-5846-41cf-ac0f-088698f9c0de}";
     inline constexpr const char* FlippyAnimationTypeId = "{7031bf2a-d823-4244-9505-dd52e65985de}";
     inline constexpr const char* FlippyComponentTypeId = "{af556b0c-a256-49ee-b4b7-0132fd880dc9}";
+    inline constexpr const char* FlippySpriteSheetTypeId = "{7780cf99-2a5b-48c2-bbe2-9915c984e4de}";
 }

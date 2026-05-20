@@ -13,6 +13,9 @@
 #include <AzCore/std/string/string.h>
 #include <AzCore/std/containers/vector.h>
 #include <AtomLyIntegration/CommonFeatures/Material/MaterialAssignment.h>
+#include <AzCore/Asset/AssetCommon.h>
+#include <AzCore/Asset/AssetSerializer.h>
+#include <Atom/RPI.Reflect/Image/StreamingImageAsset.h>
 #include <chrono>
 #include <FlippyGem/FlippyGemTypeIds.h>
 
@@ -32,6 +35,19 @@ namespace FlippyGem
         bool m_playBackwards = false;
     };
 
+    //! Groups a texture asset with its grid layout and specific animations.
+    struct FlippySpriteSheet
+    {
+        AZ_TYPE_INFO(FlippySpriteSheet, FlippySpriteSheetTypeId);
+        AZ_CLASS_ALLOCATOR(FlippySpriteSheet, AZ::SystemAllocator);
+
+        AZStd::string m_sheetName = "New Sprite Sheet";
+        AZ::Data::Asset<AZ::RPI::StreamingImageAsset> m_spriteAsset;
+        int m_columns = 1;
+        int m_rows = 1;
+        AZStd::vector<FlippyAnimation> m_animations;
+    };
+
     //! Bus interface for external scripts or components to control the Flippy Animator.
     class FlippyComponentRequests : public AZ::ComponentBus
     {
@@ -44,7 +60,7 @@ namespace FlippyGem
     };
     using FlippyComponentRequestBus = AZ::EBus<FlippyComponentRequests>;
 
-    //! Cycles through material UV offsets to animate 2D sprite sheets.
+    //! Cycles through material UV offsets and texture maps to animate 2D sprite sheets.
     class FlippyComponent
         : public AZ::Component
         , protected AZ::TickBus::Handler
@@ -74,35 +90,52 @@ namespace FlippyGem
 
     private:
         AZStd::vector<AZ::Render::MaterialAssignmentId> GetActiveMaterialIds(AZ::EntityId targetEntity) const;
-        int GetStartFrameForAnimation(const AZStd::string& name) const;
+        void SetupInitialVisualState();
 
+        void SetMaterialTexture(const AZ::Data::Asset<AZ::RPI::StreamingImageAsset>& spriteAsset);
         void ApplyMaterialScale(float tileU, float tileV);
         void ApplyMaterialOffset(float offsetU, float offsetV);
 
         void AdvanceFrame(float deltaTime);
         void RefreshMaterial();
-
         AZ::u32 OnEditorPropertiesChanged();
-        void OnPreviewInEditorChanged();
+
+        // UI Visibility Helpers
+        bool IsSingleMode() const;
+        bool IsMultiMode() const;
+        bool IsDefaultAnimationEnabled() const;
 
         AZ::EntityId m_materialEntityId;
 
+        // Hidden UV properties
         AZStd::string m_uvTileUProperty = "uv.tileU";
         AZStd::string m_uvTileVProperty = "uv.tileV";
         AZStd::string m_uvOffsetUProperty = "uv.offsetU";
         AZStd::string m_uvOffsetVProperty = "uv.offsetV";
 
-        int m_columns = 1;
-        int m_rows = 1;
+        // Toggles
         bool m_previewInEditor = true;
-
-        AZStd::vector<FlippyAnimation> m_animations;
+        bool m_useMultipleSpriteSheets = false;
+        bool m_enableDefaultAnimation = true;
         AZStd::string m_defaultAnimation = "";
 
+        // Single Mode Data
+        AZ::Data::Asset<AZ::RPI::StreamingImageAsset> m_singleSpriteAsset;
+        int m_singleColumns = 1;
+        int m_singleRows = 1;
+        AZStd::vector<FlippyAnimation> m_singleAnimations;
+
+        // Multi Mode Data
+        AZStd::vector<FlippySpriteSheet> m_spriteSheets;
+
+        // Runtime State
         bool m_isPlaying = false;
         FlippyAnimation m_currentAnim;
         float m_timeAccumulator = 0.0f;
         int m_currentFrame = 0;
+        int m_activeColumns = 1;
+        int m_activeRows = 1;
+        AZ::Data::AssetId m_activeSpriteId;
 
         bool m_isGameActive = false;
         std::chrono::steady_clock::time_point m_lastSystemTickTime;

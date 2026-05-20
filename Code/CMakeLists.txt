@@ -50,6 +50,7 @@ ly_add_target(
         PUBLIC
             AZ::AzCore
             AZ::AzFramework
+            Gem::Atom_AtomBridge.Static
             Gem::LyShine.Static
             AZ::AzToolsFramework
             Gem::CommonFeaturesAtom

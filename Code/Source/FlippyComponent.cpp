@@ -13,7 +13,9 @@
 #include <AzCore/RTTI/BehaviorContext.h> 
 #include <AtomLyIntegration/CommonFeatures/Material/MaterialComponentBus.h>
 #include <AzCore/std/any.h>
-#include <AzCore/Debug/Trace.h> 
+#include <AzCore/Debug/Trace.h>
+#include <Atom/RPI.Reflect/Image/StreamingImageAsset.h>
+#include <AzCore/Asset/AssetSerializer.h>
 
 namespace FlippyGem
 {
@@ -24,7 +26,7 @@ namespace FlippyGem
         if (auto serializeContext = azrtti_cast<AZ::SerializeContext*>(context))
         {
             serializeContext->Class<FlippyAnimation>()
-                ->Version(4)
+                ->Version(5)
                 ->Field("Name", &FlippyAnimation::m_name)
                 ->Field("StartColumn", &FlippyAnimation::m_startColumn)
                 ->Field("StartRow", &FlippyAnimation::m_startRow)
@@ -32,18 +34,30 @@ namespace FlippyGem
                 ->Field("FPS", &FlippyAnimation::m_fps)
                 ->Field("PlayBackwards", &FlippyAnimation::m_playBackwards);
 
+            serializeContext->Class<FlippySpriteSheet>()
+                ->Version(1)
+                ->Field("SheetName", &FlippySpriteSheet::m_sheetName)
+                ->Field("SpriteAsset", &FlippySpriteSheet::m_spriteAsset)
+                ->Field("Columns", &FlippySpriteSheet::m_columns)
+                ->Field("Rows", &FlippySpriteSheet::m_rows)
+                ->Field("Animations", &FlippySpriteSheet::m_animations);
+
             serializeContext->Class<FlippyComponent, AZ::Component>()
-                ->Version(4)
+                ->Version(5)
                 ->Field("MaterialEntity", &FlippyComponent::m_materialEntityId)
                 ->Field("UVTileUProperty", &FlippyComponent::m_uvTileUProperty)
                 ->Field("UVTileVProperty", &FlippyComponent::m_uvTileVProperty)
                 ->Field("UVOffsetUProperty", &FlippyComponent::m_uvOffsetUProperty)
                 ->Field("UVOffsetVProperty", &FlippyComponent::m_uvOffsetVProperty)
-                ->Field("Columns", &FlippyComponent::m_columns)
-                ->Field("Rows", &FlippyComponent::m_rows)
                 ->Field("PreviewInEditor", &FlippyComponent::m_previewInEditor)
+                ->Field("UseMultipleSpriteSheets", &FlippyComponent::m_useMultipleSpriteSheets)
+                ->Field("EnableDefaultAnimation", &FlippyComponent::m_enableDefaultAnimation)
                 ->Field("DefaultAnimation", &FlippyComponent::m_defaultAnimation)
-                ->Field("Animations", &FlippyComponent::m_animations);
+                ->Field("SingleSpriteAsset", &FlippyComponent::m_singleSpriteAsset)
+                ->Field("SingleColumns", &FlippyComponent::m_singleColumns)
+                ->Field("SingleRows", &FlippyComponent::m_singleRows)
+                ->Field("SingleAnimations", &FlippyComponent::m_singleAnimations)
+                ->Field("SpriteSheets", &FlippyComponent::m_spriteSheets);
 
             if (auto editContext = serializeContext->GetEditContext())
             {
@@ -59,28 +73,51 @@ namespace FlippyGem
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_fps, "FPS", "")
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyAnimation::m_playBackwards, "Play Backwards", "Plays the animation sequence in reverse");
 
+                editContext->Class<FlippySpriteSheet>("Sprite Sheet", "A texture containing an animation grid.")
+                    ->ClassElement(AZ::Edit::ClassElements::EditorData, "")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippySpriteSheet::m_sheetName, "Sheet Name", "Identifier for this spritesheet")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippySpriteSheet::m_spriteAsset, "Sprite Asset", "The image file to feed to the material")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippySpriteSheet::m_columns, "Columns", "")
+                    ->Attribute(AZ::Edit::Attributes::Min, 1)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippySpriteSheet::m_rows, "Rows", "")
+                    ->Attribute(AZ::Edit::Attributes::Min, 1)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippySpriteSheet::m_animations, "Animations", "");
+
                 editContext->Class<FlippyComponent>("Flippy Animator", "Plays specific animations from a spritesheet.")
                     ->ClassElement(AZ::Edit::ClassElements::EditorData, "")
                     ->Attribute(AZ::Edit::Attributes::Category, "Rendering")
                     ->Attribute(AZ::Edit::Attributes::AppearsInAddComponentMenu, AZ_CRC_CE("Game"))
 
-                    ->ClassElement(AZ::Edit::ClassElements::Group, "Grid Settings")
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_columns, "Columns", "Number of vertical columns")
-                    ->Attribute(AZ::Edit::Attributes::Min, 1)
-                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_rows, "Rows", "Number of horizontal rows")
-                    ->Attribute(AZ::Edit::Attributes::Min, 1)
-                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
-
-                    ->ClassElement(AZ::Edit::ClassElements::Group, "Material Integration")
+                    ->ClassElement(AZ::Edit::ClassElements::Group, "Component Settings")
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_materialEntityId, "Target Entity", "Leave blank to target this entity.")
-
-                    ->ClassElement(AZ::Edit::ClassElements::Group, "Animations")
                     ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_previewInEditor, "Preview In Editor", "Play the Animation in editor")
-                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnPreviewInEditorChanged)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_defaultAnimation, "Default State", "")
                     ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
-                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_animations, "Animation List", "")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_useMultipleSpriteSheets, "Use Multiple Sprite Sheets", "Toggle arrayed list of images")
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, AZ::Edit::PropertyRefreshLevels::EntireTree)
+
+                    ->ClassElement(AZ::Edit::ClassElements::Group, "Default Animation Behavior")
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_enableDefaultAnimation, "Enable Default Animation", "Auto-play an animation on startup")
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, AZ::Edit::PropertyRefreshLevels::EntireTree)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_defaultAnimation, "Default State", "Name of the animation to auto-play")
+                    ->Attribute(AZ::Edit::Attributes::Visibility, &FlippyComponent::IsDefaultAnimationEnabled)
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
+
+                    ->ClassElement(AZ::Edit::ClassElements::Group, "Single Sprite Configuration")
+                    ->Attribute(AZ::Edit::Attributes::Visibility, &FlippyComponent::IsSingleMode)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_singleSpriteAsset, "Sprite Asset", "The image file to feed to the material")
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_singleColumns, "Columns", "Number of vertical columns")
+                    ->Attribute(AZ::Edit::Attributes::Min, 1)
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_singleRows, "Rows", "Number of horizontal rows")
+                    ->Attribute(AZ::Edit::Attributes::Min, 1)
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_singleAnimations, "Animation List", "")
+                    ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged)
+
+                    ->ClassElement(AZ::Edit::ClassElements::Group, "Multiple Sprite Sheets Configuration")
+                    ->Attribute(AZ::Edit::Attributes::Visibility, &FlippyComponent::IsMultiMode)
+                    ->DataElement(AZ::Edit::UIHandlers::Default, &FlippyComponent::m_spriteSheets, "Sprite Sheets", "Arrayed list of images and their specific animations")
                     ->Attribute(AZ::Edit::Attributes::ChangeNotify, &FlippyComponent::OnEditorPropertiesChanged);
             }
         }
@@ -119,10 +156,7 @@ namespace FlippyGem
         m_isGameActive = false;
         m_isMaterialInitialized = false;
 
-        //! Unconditionally execute the default animation on activate.
-        //! In Game Mode, this guarantees it plays when you hit Play.
-        //! In Editor Mode, if the preview toggle is off, SystemTickBus will intentionally ignore it!
-        PlayAnimation(m_defaultAnimation);
+        SetupInitialVisualState();
     }
 
     void FlippyComponent::Deactivate()
@@ -133,54 +167,94 @@ namespace FlippyGem
         FlippyComponentRequestBus::Handler::BusDisconnect();
     }
 
-    int FlippyComponent::GetStartFrameForAnimation(const AZStd::string& name) const
-    {
-        if (m_columns <= 0 || m_rows <= 0)
-        {
-            return 0;
-        }
+    bool FlippyComponent::IsSingleMode() const { return !m_useMultipleSpriteSheets; }
+    bool FlippyComponent::IsMultiMode() const { return m_useMultipleSpriteSheets; }
+    bool FlippyComponent::IsDefaultAnimationEnabled() const { return m_enableDefaultAnimation; }
 
-        for (const auto& anim : m_animations)
+    void FlippyComponent::SetupInitialVisualState()
+    {
+        StopAnimation();
+
+        if (m_enableDefaultAnimation && !m_defaultAnimation.empty())
         {
-            if (anim.m_name == name)
+            PlayAnimation(m_defaultAnimation);
+
+            // If preview is off in the Editor, stop immediately but rest on the first frame of the default animation
+            if (!m_previewInEditor && !m_isGameActive)
             {
-                int startFrameCalc = (anim.m_startRow * m_columns) + anim.m_startColumn;
-                return anim.m_playBackwards ? (startFrameCalc + anim.m_frameCount - 1) : startFrameCalc;
+                StopAnimation();
+                RefreshMaterial();
             }
         }
-
-        if (!m_animations.empty())
+        else
         {
-            int startFrameCalc = (m_animations[0].m_startRow * m_columns) + m_animations[0].m_startColumn;
-            return m_animations[0].m_playBackwards ? (startFrameCalc + m_animations[0].m_frameCount - 1) : startFrameCalc;
-        }
+            // If no default animation is enabled, fallback to forcing the first valid sprite sheet into the material
+            if (m_useMultipleSpriteSheets && !m_spriteSheets.empty())
+            {
+                SetMaterialTexture(m_spriteSheets[0].m_spriteAsset);
+                m_activeSpriteId = m_spriteSheets[0].m_spriteAsset.GetId();
+                m_activeColumns = m_spriteSheets[0].m_columns;
+                m_activeRows = m_spriteSheets[0].m_rows;
+            }
+            else if (!m_useMultipleSpriteSheets)
+            {
+                SetMaterialTexture(m_singleSpriteAsset);
+                m_activeSpriteId = m_singleSpriteAsset.GetId();
+                m_activeColumns = m_singleColumns;
+                m_activeRows = m_singleRows;
+            }
 
-        return 0;
+            m_currentFrame = 0;
+            m_isMaterialInitialized = false;
+            RefreshMaterial();
+        }
     }
 
     void FlippyComponent::PlayAnimation(const AZStd::string& animationName)
     {
-        if (m_columns <= 0 || m_rows <= 0 || m_animations.empty())
-        {
-            return;
-        }
+        if (animationName.empty()) return;
 
         const FlippyAnimation* targetAnim = nullptr;
+        AZ::Data::Asset<AZ::RPI::StreamingImageAsset> targetSprite;
+        int targetCols = 1;
+        int targetRows = 1;
 
-        for (const auto& anim : m_animations)
+        if (m_useMultipleSpriteSheets)
         {
-            if (anim.m_name == animationName)
+            for (const auto& sheet : m_spriteSheets)
             {
-                targetAnim = &anim;
-                break;
+                for (const auto& anim : sheet.m_animations)
+                {
+                    if (anim.m_name == animationName)
+                    {
+                        targetAnim = &anim;
+                        targetSprite = sheet.m_spriteAsset;
+                        targetCols = sheet.m_columns;
+                        targetRows = sheet.m_rows;
+                        break;
+                    }
+                }
+                if (targetAnim) break;
+            }
+        }
+        else
+        {
+            for (const auto& anim : m_singleAnimations)
+            {
+                if (anim.m_name == animationName)
+                {
+                    targetAnim = &anim;
+                    targetSprite = m_singleSpriteAsset;
+                    targetCols = m_singleColumns;
+                    targetRows = m_singleRows;
+                    break;
+                }
             }
         }
 
-        if (!targetAnim)
-        {
-            targetAnim = &m_animations[0];
-        }
+        if (!targetAnim) return; // Animation not found
 
+        // Circuit breaker if animation is already playing
         if (m_isPlaying && m_currentAnim.m_name == targetAnim->m_name)
         {
             m_currentAnim = *targetAnim;
@@ -188,7 +262,21 @@ namespace FlippyGem
         }
 
         m_currentAnim = *targetAnim;
-        m_currentFrame = GetStartFrameForAnimation(targetAnim->m_name);
+
+        // If the spritesheet changed, update the material texture and grid sizes
+        if (targetSprite.GetId() != m_activeSpriteId)
+        {
+            SetMaterialTexture(targetSprite);
+            m_activeSpriteId = targetSprite.GetId();
+            m_activeColumns = targetCols;
+            m_activeRows = targetRows;
+            m_isMaterialInitialized = false; // Force a scale recalculation
+        }
+
+        if (m_activeColumns <= 0 || m_activeRows <= 0) return;
+
+        int startFrameCalc = (m_currentAnim.m_startRow * m_activeColumns) + m_currentAnim.m_startColumn;
+        m_currentFrame = m_currentAnim.m_playBackwards ? (startFrameCalc + m_currentAnim.m_frameCount - 1) : startFrameCalc;
 
         m_timeAccumulator = 0.0f;
         m_isPlaying = true;
@@ -200,37 +288,9 @@ namespace FlippyGem
         m_isPlaying = false;
     }
 
-    void FlippyComponent::OnPreviewInEditorChanged()
-    {
-        //! Exclusive callback to perfectly mirror the FlipBook behavior when the UI box is clicked
-        if (m_previewInEditor)
-        {
-            PlayAnimation(m_defaultAnimation);
-        }
-        else
-        {
-            StopAnimation();
-            m_currentFrame = GetStartFrameForAnimation(m_defaultAnimation);
-            RefreshMaterial();
-        }
-    }
-
     AZ::u32 FlippyComponent::OnEditorPropertiesChanged()
     {
-        m_isMaterialInitialized = false;
-
-        if (m_previewInEditor)
-        {
-            PlayAnimation(m_defaultAnimation);
-        }
-        else
-        {
-            StopAnimation();
-            m_currentFrame = GetStartFrameForAnimation(m_defaultAnimation);
-        }
-
-        RefreshMaterial();
-
+        SetupInitialVisualState();
         return AZ::Edit::PropertyRefreshLevels::ValuesOnly;
     }
 
@@ -238,13 +298,13 @@ namespace FlippyGem
     {
         AZ::EntityId targetEntity = m_materialEntityId.IsValid() ? m_materialEntityId : GetEntityId();
 
-        if (!AZ::Render::MaterialComponentRequestBus::HasHandlers(targetEntity) || m_columns <= 0 || m_rows <= 0)
+        if (!AZ::Render::MaterialComponentRequestBus::HasHandlers(targetEntity) || m_activeColumns <= 0 || m_activeRows <= 0)
         {
             return;
         }
 
-        float tileU = 1.0f / static_cast<float>(m_columns);
-        float tileV = 1.0f / static_cast<float>(m_rows);
+        float tileU = 1.0f / static_cast<float>(m_activeColumns);
+        float tileV = 1.0f / static_cast<float>(m_activeRows);
 
         if (!m_isMaterialInitialized || m_lastTileU != tileU || m_lastTileV != tileV)
         {
@@ -254,8 +314,8 @@ namespace FlippyGem
             m_isMaterialInitialized = true;
         }
 
-        int currentColumn = m_currentFrame % m_columns;
-        int currentRow = m_currentFrame / m_columns;
+        int currentColumn = m_currentFrame % m_activeColumns;
+        int currentRow = m_currentFrame / m_activeColumns;
 
         float offsetX = static_cast<float>(currentColumn) * tileU;
         float offsetY = static_cast<float>(currentRow) * tileV;
@@ -265,12 +325,12 @@ namespace FlippyGem
 
     void FlippyComponent::AdvanceFrame(float deltaTime)
     {
-        if (!m_isPlaying || m_columns <= 0 || m_rows <= 0 || m_currentAnim.m_frameCount <= 0 || m_currentAnim.m_fps <= 0.0f)
+        if (!m_isPlaying || m_activeColumns <= 0 || m_activeRows <= 0 || m_currentAnim.m_frameCount <= 0 || m_currentAnim.m_fps <= 0.0f)
         {
             return;
         }
 
-        int globalStartFrame = (m_currentAnim.m_startRow * m_columns) + m_currentAnim.m_startColumn;
+        int globalStartFrame = (m_currentAnim.m_startRow * m_activeColumns) + m_currentAnim.m_startColumn;
         int globalEndFrame = globalStartFrame + m_currentAnim.m_frameCount - 1;
 
         if (m_currentFrame < globalStartFrame || m_currentFrame > globalEndFrame)
@@ -321,7 +381,6 @@ namespace FlippyGem
         m_lastGameTickTime = std::chrono::steady_clock::now();
         m_isGameActive = true;
 
-        //! In Game Mode, we exclusively rely on this function. It ignores the Editor preview toggle!
         AdvanceFrame(deltaTime);
     }
 
@@ -331,14 +390,12 @@ namespace FlippyGem
         std::chrono::duration<float> delta = now - m_lastSystemTickTime;
         m_lastSystemTickTime = now;
 
-        //! Yield execution to OnTick if the game is actively running.
         std::chrono::duration<float> timeSinceGameTick = now - m_lastGameTickTime;
         if (timeSinceGameTick.count() < 0.5f)
         {
             return;
         }
 
-        //! We are securely in Editor Mode. If the toggle is off, simply refuse to advance time!
         if (!m_previewInEditor)
         {
             return;
@@ -372,6 +429,26 @@ namespace FlippyGem
         }
 
         return ids;
+    }
+
+    void FlippyComponent::SetMaterialTexture(const AZ::Data::Asset<AZ::RPI::StreamingImageAsset>& spriteAsset)
+    {
+        if (!spriteAsset.GetId().IsValid())
+        {
+            return;
+        }
+
+        AZ::EntityId targetEntity = m_materialEntityId.IsValid() ? m_materialEntityId : GetEntityId();
+        auto materialIds = GetActiveMaterialIds(targetEntity);
+
+        for (const auto& id : materialIds)
+        {
+            // Use AZ::Data::Asset<AZ::RPI::StreamingImageAsset> directly,
+            // the MaterialComponent will handle the conversion to the texture map.
+            AZ::Render::MaterialComponentRequestBus::Event(
+                targetEntity, &AZ::Render::MaterialComponentRequests::SetPropertyValue,
+                id, AZStd::string("baseColor.textureMap"), AZStd::any(spriteAsset));
+        }
     }
 
     void FlippyComponent::ApplyMaterialScale(float tileU, float tileV)
